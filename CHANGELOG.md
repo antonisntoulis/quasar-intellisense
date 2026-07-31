@@ -4,6 +4,11 @@
 
 First Marketplace release.
 
+- Status bar badge with the Quasar logo and the installed Quasar version, shown only when
+  a quasar project is detected. The tooltip summarizes detected versions, class and color
+  counts, icon sets, and css addon state; clicking opens the extension log.
+- Stricter dormancy: in workspaces without quasar the extension does nothing beyond a
+  single package.json read (no watchers, scans, providers, or UI).
 - Install-flavor support, verified against scaffolded projects of each flavor: the quasar
   app may live in a monorepo sub-package with hoisted `node_modules` (both discovered
   automatically), and the css addon is detected from `quasar.addon.css` / `flex-addon`

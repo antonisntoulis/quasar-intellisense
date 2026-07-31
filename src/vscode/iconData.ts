@@ -39,9 +39,20 @@ export class IconData {
   private dataUriCache = new Map<string, string>()
   private extrasRoot: string | undefined
 
+  /** version of the installed @quasar/extras, for the status bar */
+  extrasVersion: string | undefined
+
   /** root: the quasar app directory; workspaceRoot: where the node_modules walk stops */
   constructor(private root: string, workspaceRoot: string, private log: (msg: string) => void) {
     this.extrasRoot = findInstalledPackage('@quasar/extras', root, workspaceRoot)
+    if (this.extrasRoot) {
+      try {
+        this.extrasVersion = (JSON.parse(
+          fs.readFileSync(path.join(this.extrasRoot, 'package.json'), 'utf8')) as { version?: string }).version
+      } catch {
+        // version stays unknown
+      }
+    }
   }
 
   get available(): boolean {

@@ -11,15 +11,21 @@ import { QuasarDefinitionProvider } from './vscode/definitions'
 import { QuasarCodeActionProvider } from './vscode/codeActions'
 import { CustomColorScanner } from './vscode/watchers'
 import { IconData } from './vscode/iconData'
+import { QuasarStatusBar } from './vscode/statusBar'
+import { readQuasarConfig } from './vscode/quasarConfig'
 
 const SELECTOR: vscode.DocumentSelector = { language: 'vue', scheme: 'file' }
 
 let output: vscode.OutputChannel
 
+/**
+ * Dormancy contract: in a workspace without quasar, activate() does at most
+ * three tiny fs reads (root package.json + two monorepo marker stats) and
+ * returns. No output channel, no status bar, no providers, no watchers, no
+ * workspace search. The one-shot sub-package search runs only when monorepo
+ * markers exist or there is no root package.json at all.
+ */
 export function activate(context: vscode.ExtensionContext): void {
-  output = vscode.window.createOutputChannel('Quasar IntelliSense')
-  context.subscriptions.push(output)
-
   const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
   if (!folder) return
 
@@ -27,16 +33,24 @@ export function activate(context: vscode.ExtensionContext): void {
     activateFeatures(context, folder, folder)
     return
   }
+  if (!mayHoldSubPackages(folder)) return // ordinary non-quasar project: fully dormant
 
   // monorepo: the quasar app may live in a sub-package
   void findQuasarPackageRoot(folder).then((root) => {
-    if (!root) {
-      output.appendLine('No quasar dependency found in workspace, staying dormant.')
-      return
-    }
-    output.appendLine(`Quasar app found in sub-package: ${path.relative(folder, root)}/`)
-    activateFeatures(context, root, folder)
+    if (root) activateFeatures(context, root, folder)
   })
+}
+
+/** cheap monorepo markers, so ordinary non-quasar projects trigger no search */
+function mayHoldSubPackages(folder: string): boolean {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(folder, 'package.json'), 'utf8'))
+    if (pkg.workspaces) return true
+  } catch {
+    return true // no root package.json: a quasar app may sit in a subfolder
+  }
+  return ['pnpm-workspace.yaml', 'lerna.json', 'nx.json']
+    .some((f) => fs.existsSync(path.join(folder, f)))
 }
 
 /** shallowest sub-package whose package.json depends on quasar */
@@ -51,6 +65,11 @@ async function findQuasarPackageRoot(folder: string): Promise<string | undefined
 /** root: the quasar app directory; folder: the workspace folder containing it */
 function activateFeatures(context: vscode.ExtensionContext, root: string, folder: string): void {
   const started = Date.now()
+  output = vscode.window.createOutputChannel('Quasar IntelliSense')
+  context.subscriptions.push(output)
+  const appRootRel = path.relative(folder, root)
+  if (appRootRel) output.appendLine(`Quasar app found in sub-package: ${appRootRel}/`)
+
   // monorepos hoist node_modules: resolve installed packages walking up
   const quasarDir = findInstalledPackage('quasar', root, folder)
   const host: IndexHost = { index: new QuasarIndex(buildStaticInputs(quasarDir)) }
@@ -76,6 +95,15 @@ function activateFeatures(context: vscode.ExtensionContext, root: string, folder
   decorations.register(context)
   diagnostics.register(context)
 
+  // status bar badge; commands are palette-gated on this context key
+  void vscode.commands.executeCommand('setContext', 'quasarIntellisense.active', true)
+  const statusBar = new QuasarStatusBar(host, {
+    quasarVersion: quasarDir ? readPackageVersion(quasarDir) : undefined,
+    appRootRel,
+    configFile: readQuasarConfig(root)?.file,
+  })
+  statusBar.register(context, output)
+
   output.appendLine(
     `Activated in ${Date.now() - started}ms: ${host.index.classEntries.length} classes, ` +
     `${host.index.colors.size} colors, ${host.index.colorPropNames.size} color props.`,
@@ -87,6 +115,7 @@ function activateFeatures(context: vscode.ExtensionContext, root: string, folder
     () => {
       decorations.updateAll()
       diagnostics.refreshAll()
+      statusBar.refresh()
     },
     (msg) => output.appendLine(msg),
   )
@@ -99,6 +128,7 @@ function activateFeatures(context: vscode.ExtensionContext, root: string, folder
     try {
       if (!quasarDir) throw new Error('quasar not installed')
       host.index.setColorProps(walkApiForColorProps(path.join(quasarDir, 'dist/api')))
+      statusBar.refresh()
     } catch {
       output.appendLine('quasar/dist/api not readable, keeping bundled color-prop table.')
     }
@@ -111,10 +141,19 @@ function activateFeatures(context: vscode.ExtensionContext, root: string, folder
   void icons.initialize().then(async () => {
     // non-CLI flavors enable the css addon by importing it in a source file
     if (icons.addonCssDetected) host.index.setAddonCssImported(true)
+    statusBar.refresh()
     await Promise.all(icons.detectedSets.map((set) => icons.ensureSvgs(set)))
     decorations.updateAll()
     diagnostics.refreshAll()
   })
+}
+
+function readPackageVersion(pkgDir: string): string | undefined {
+  try {
+    return (JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8')) as { version?: string }).version
+  } catch {
+    return undefined
+  }
 }
 
 export function deactivate(): void {}

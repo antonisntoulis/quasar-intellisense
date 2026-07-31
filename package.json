@@ -50,6 +50,30 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "icons": {
+      "quasar-logo": {
+        "description": "Quasar logo",
+        "default": {
+          "fontPath": "images/quasar-icons.woff",
+          "fontCharacter": "\\F101"
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "quasar-intellisense.showOutput",
+        "title": "Show Output Log",
+        "category": "Quasar IntelliSense"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "quasar-intellisense.showOutput",
+          "when": "quasarIntellisense.active"
+        }
+      ]
+    },
     "configurationDefaults": {
       "[vue]": {
         "editor.quickSuggestions": {

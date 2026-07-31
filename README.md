@@ -33,6 +33,9 @@ and your own brand colors, custom classes, and icon sets are first-class citizen
   rule, theme css, sass variable, quasar.config brand entry, or Quasar's own palette source.
 - **Theme-aware**: colors defined per `.body--light` / `.body--dark` show the value matching
   your current editor theme; hovers show both values.
+- **Status bar badge**: a small Quasar logo with the installed Quasar version appears in the
+  status bar when a quasar project is detected. Hover for a summary of what was found
+  (versions, class and color counts, icon sets, css addon state); click to open the log.
 
 ### Diagnostics and quick fixes
 
@@ -96,6 +99,10 @@ At startup the extension reads the Quasar version installed in your workspace
 (`node_modules/quasar`) for the palette and component API, detects icon sets from your source
 imports and quasar.config, and scans `src/**` styles for custom colors, with file watchers
 for live updates. If Quasar's files are not readable, bundled snapshots are used.
+
+In a workspace without quasar the extension is fully dormant: no file watchers, no workspace
+scans, no providers, no UI. The activation check is a single package.json read (plus a
+one-shot sub-package search only in workspaces with monorepo markers).
 
 ## Settings
 
