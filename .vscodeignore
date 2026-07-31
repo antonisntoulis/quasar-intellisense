@@ -1,0 +1,15 @@
+.vscode/**
+.claude/**
+.agents/**
+node_modules/**
+src/**
+scripts/**
+docs/**
+data/**
+esbuild.mjs
+tsconfig.json
+**/*.map
+*.vsix
+AGENTS.md
+skills-lock.json
+.gitignore
