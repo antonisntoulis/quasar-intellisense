@@ -13,6 +13,8 @@ interface FileScan {
   rules: CustomColorRule[]
   themeVars: ThemeVarDef[]
   pool: SassVarDef[]
+  /** file imports quasar.addon.css / flex-addon (enables addon classes) */
+  addonImport: boolean
 }
 
 /**
@@ -98,7 +100,10 @@ export class CustomColorScanner {
       const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(fsPath))
       const text = bytes.toString()
       const rel = path.relative(this.root, fsPath)
-      const scan: FileScan = { rules: [], themeVars: [], pool: [] }
+      const scan: FileScan = {
+        rules: [], themeVars: [], pool: [],
+        addonImport: text.includes('quasar.addon') || text.includes('flex-addon'),
+      }
       const sheets = fsPath.endsWith('.vue') ? extractVueStyleBlocks(text) : [text]
       for (const sheet of sheets) {
         const result = scanStylesheet(sheet, rel)
@@ -120,14 +125,16 @@ export class CustomColorScanner {
     const stylesheetRules: CustomColorRule[] = []
     const themeVars: ThemeVarDef[] = []
     const sassVarPool: SassVarDef[] = []
+    let addonCssImported = false
     for (const scan of this.fileCache.values()) {
       stylesheetRules.push(...scan.rules)
       themeVars.push(...scan.themeVars)
       sassVarPool.push(...scan.pool)
+      if (scan.addonImport) addonCssImported = true
     }
     const config = readQuasarConfig(this.root)
     this.host.index.setCustomInputs({
-      stylesheetRules, themeVars, sassVarPool,
+      stylesheetRules, themeVars, sassVarPool, addonCssImported,
       quasarConfigText: config?.text,
       quasarConfigFile: config?.file,
     })

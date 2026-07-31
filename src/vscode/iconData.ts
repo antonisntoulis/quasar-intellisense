@@ -3,6 +3,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { pascal, quasarSvgToSvg, svgToDataUri, type IconSetId, ICON_SET_IDS } from '../core/icons'
 import { readQuasarConfig } from './quasarConfig'
+import { findInstalledPackage } from './nodeModules'
 import bundledLigatures from '../../data/material-ligatures'
 
 const LIGATURES = bundledLigatures as { icons: string[]; symbols: string[] }
@@ -30,15 +31,17 @@ export class IconData {
   knownNames = new Set<string>()
   /** project defines $q.iconMapFn: names can be anything, suppress diagnostics */
   hasIconMapFn = false
+  /** a source file imports quasar.addon.css / flex-addon (non-CLI cssAddon) */
+  addonCssDetected = false
   /** export name -> encoded svg, per set (loaded on first preview need) */
   private svgs = new Map<IconSetId, Map<string, string>>()
   private svgLoads = new Map<IconSetId, Promise<void>>()
   private dataUriCache = new Map<string, string>()
   private extrasRoot: string | undefined
 
-  constructor(private root: string, private log: (msg: string) => void) {
-    const candidate = path.join(root, 'node_modules', '@quasar', 'extras')
-    if (fs.existsSync(candidate)) this.extrasRoot = candidate
+  /** root: the quasar app directory; workspaceRoot: where the node_modules walk stops */
+  constructor(private root: string, workspaceRoot: string, private log: (msg: string) => void) {
+    this.extrasRoot = findInstalledPackage('@quasar/extras', root, workspaceRoot)
   }
 
   get available(): boolean {
@@ -87,6 +90,7 @@ export class IconData {
         continue
       }
       if (text.includes('iconMapFn')) this.hasIconMapFn = true
+      if (text.includes('quasar.addon') || text.includes('flex-addon')) this.addonCssDetected = true
       if (!text.includes('@quasar/extras') && !text.includes('quasar/icon-set')) continue
       for (const m of text.matchAll(importRe)) {
         if ((ICON_SET_IDS as string[]).includes(m[1]!)) found.add(m[1] as IconSetId)

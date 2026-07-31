@@ -68,6 +68,8 @@ export interface CustomInputs {
   quasarConfigText?: string
   quasarConfigFile?: string
   stylesheetRules?: CustomColorRule[]
+  /** a quasar.addon.css / flex-addon import exists in a scanned stylesheet */
+  addonCssImported?: boolean
 }
 
 interface Swatch {
@@ -122,6 +124,8 @@ export class QuasarIndex {
   private paletteLines = new Map<string, number>()
   private variablesSassPath: string | undefined
   private custom: CustomInputs = {}
+  /** addon css imported in a source file (detected by the icon-set scan) */
+  private addonFromSource = false
 
   constructor(staticInputs: StaticInputs = {}) {
     this.variablesSassPath = staticInputs.variablesSassPath
@@ -150,6 +154,13 @@ export class QuasarIndex {
   setColorProps(props: ColorPropsData): void {
     this.colorPropNames = new Set(props.propNames)
     this.version++ // prop names shape template scans: invalidate per-version caches
+  }
+
+  /** non-CLI flavors enable the css addon by importing quasar.addon.css / flex-addon */
+  setAddonCssImported(imported: boolean): void {
+    if (imported === this.addonFromSource) return
+    this.addonFromSource = imported
+    this.rebuild()
   }
 
   isColorProp(attrName: string): boolean {
@@ -312,9 +323,10 @@ export class QuasarIndex {
     //    runtime). Only overrides *values* of existing colors: a custom brand
     //    key alone creates the --q-X variable but no .text-X/.bg-X class, so
     //    it would not render as a class or color prop.
+    let configAddon = false
     if (this.custom.quasarConfigText) {
       const config = parseQuasarConfig(this.custom.quasarConfigText)
-      this.cssAddon = config.cssAddon
+      configAddon = config.cssAddon
       for (const [name, { value, line }] of Object.entries(config.brand)) {
         const existing = colors.get(name)
         if (!existing) continue
@@ -323,9 +335,8 @@ export class QuasarIndex {
           : existing.locations
         colors.set(name, { name, value, source: 'brand-config', locations, ...toSwatch(value) })
       }
-    } else {
-      this.cssAddon = false
     }
+    this.cssAddon = configAddon || this.addonFromSource || Boolean(this.custom.addonCssImported)
 
     this.colors = colors
     this.classEntries = this.buildClassEntries()

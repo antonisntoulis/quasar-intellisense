@@ -4,6 +4,7 @@ import * as path from 'node:path'
 import { QuasarIndex } from './core/quasarIndex'
 import type { ColorPropsData } from './core/types'
 import { QuasarCompletionProvider, QuasarHoverProvider, themeKind, type IndexHost } from './vscode/providers'
+import { findInstalledPackage, hasQuasarDependency } from './vscode/nodeModules'
 import { ColorDecorations } from './vscode/decorations'
 import { ColorDiagnostics } from './vscode/diagnostics'
 import { QuasarDefinitionProvider } from './vscode/definitions'
@@ -19,14 +20,40 @@ export function activate(context: vscode.ExtensionContext): void {
   output = vscode.window.createOutputChannel('Quasar IntelliSense')
   context.subscriptions.push(output)
 
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-  if (!root || !hasQuasarDependency(root)) {
-    output.appendLine('No quasar dependency found in workspace, staying dormant.')
+  const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  if (!folder) return
+
+  if (hasQuasarDependency(folder)) {
+    activateFeatures(context, folder, folder)
     return
   }
 
+  // monorepo: the quasar app may live in a sub-package
+  void findQuasarPackageRoot(folder).then((root) => {
+    if (!root) {
+      output.appendLine('No quasar dependency found in workspace, staying dormant.')
+      return
+    }
+    output.appendLine(`Quasar app found in sub-package: ${path.relative(folder, root)}/`)
+    activateFeatures(context, root, folder)
+  })
+}
+
+/** shallowest sub-package whose package.json depends on quasar */
+async function findQuasarPackageRoot(folder: string): Promise<string | undefined> {
+  const uris = await vscode.workspace.findFiles(
+    new vscode.RelativePattern(folder, '**/package.json'), '**/node_modules/**', 200)
+  const dirs = uris.map((u) => path.dirname(u.fsPath)).filter((d) => d !== folder)
+  dirs.sort((a, b) => a.split(path.sep).length - b.split(path.sep).length || a.localeCompare(b))
+  return dirs.find(hasQuasarDependency)
+}
+
+/** root: the quasar app directory; folder: the workspace folder containing it */
+function activateFeatures(context: vscode.ExtensionContext, root: string, folder: string): void {
   const started = Date.now()
-  const host: IndexHost = { index: new QuasarIndex(buildStaticInputs(root)) }
+  // monorepos hoist node_modules: resolve installed packages walking up
+  const quasarDir = findInstalledPackage('quasar', root, folder)
+  const host: IndexHost = { index: new QuasarIndex(buildStaticInputs(quasarDir)) }
 
   host.index.setActiveTheme(themeKind())
 
@@ -70,7 +97,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // the (rarely different) runtime table over the bundled one when it lands
   setImmediate(() => {
     try {
-      host.index.setColorProps(walkApiForColorProps(path.join(root, 'node_modules/quasar/dist/api')))
+      if (!quasarDir) throw new Error('quasar not installed')
+      host.index.setColorProps(walkApiForColorProps(path.join(quasarDir, 'dist/api')))
     } catch {
       output.appendLine('quasar/dist/api not readable, keeping bundled color-prop table.')
     }
@@ -78,9 +106,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // icons: detect sets, load name lists, then preload svg bodies for previews;
   // all off the activation path, decorations appear when data lands
-  const icons = new IconData(root, (msg) => output.appendLine(msg))
+  const icons = new IconData(root, folder, (msg) => output.appendLine(msg))
   host.icons = icons
   void icons.initialize().then(async () => {
+    // non-CLI flavors enable the css addon by importing it in a source file
+    if (icons.addonCssDetected) host.index.setAddonCssImported(true)
     await Promise.all(icons.detectedSets.map((set) => icons.ensureSvgs(set)))
     decorations.updateAll()
     diagnostics.refreshAll()
@@ -89,22 +119,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {}
 
-function hasQuasarDependency(root: string): boolean {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
-    return Boolean(pkg.dependencies?.quasar ?? pkg.devDependencies?.quasar)
-  } catch {
-    return false
-  }
-}
-
-function buildStaticInputs(root: string): {
+function buildStaticInputs(quasarDir: string | undefined): {
   variablesSassText?: string
   variablesSassPath?: string
 } {
   const inputs: { variablesSassText?: string; variablesSassPath?: string } = {}
   try {
-    const variablesPath = path.join(root, 'node_modules/quasar/src/css/variables.sass')
+    if (!quasarDir) throw new Error('quasar not installed')
+    const variablesPath = path.join(quasarDir, 'src/css/variables.sass')
     inputs.variablesSassText = fs.readFileSync(variablesPath, 'utf8')
     inputs.variablesSassPath = variablesPath
   } catch {

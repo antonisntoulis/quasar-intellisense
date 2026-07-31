@@ -51,8 +51,9 @@ Warnings only where the extension can be certain, with one-click fixes:
 - Only names that actually render are offered: color names come from the real `.text-X` /
   `.bg-X` classes in the installed quasar.css, icon names are validated against the
   installed `@quasar/extras` exports.
-- Responsive variants (`q-pa-md-lg`, `col-sm-6`...) are offered only when `cssAddon: true`
-  is set in quasar.config.
+- Responsive variants (`q-pa-md-lg`, `col-sm-6`...) are offered only when the css addon is
+  enabled: `cssAddon: true` in quasar.config, or an import of `quasar.addon.css` /
+  `flex-addon` anywhere in your sources or styles.
 - Projects using `iconMapFn` suppress all icon warnings automatically.
 
 ## Performance
@@ -64,8 +65,9 @@ decorations plus diagnostics refresh under 0.1 ms on a 50 KB component.
 
 ## Requirements
 
-- A workspace whose root `package.json` depends on `quasar` (v2). The extension stays fully
-  dormant everywhere else.
+- A workspace containing a `package.json` that depends on `quasar` (v2), either at the root
+  or in a sub-package (monorepos with hoisted `node_modules` are supported; the first quasar
+  app found is used). The extension stays fully dormant everywhere else.
 - Vue language support (e.g. the official Vue extension) so `.vue` files have the `vue`
   language id.
 
@@ -77,12 +79,14 @@ installed `quasar` and `@quasar/extras` packages:
 - **[Vite plugin](https://quasar.dev/start/vite-plugin)** (`@quasar/vite-plugin`): the
   flavor this extension is developed and tested against.
 - **[Quasar CLI](https://quasar.dev/start/quick-start)** (`@quasar/app-vite` /
-  `@quasar/app-webpack`): supported. When a `quasar.config` file exists, its
-  `framework.config.brand` colors, `cssAddon` flag, and `extras` / `iconSet` entries are
-  picked up automatically. Less battle-tested than the Vite plugin flavor; issue reports
-  are welcome.
-- **Vue CLI plugin**: untested, but uses the same packages and `src/` layout, so it is
+  `@quasar/app-webpack`): supported and verified against a scaffolded project. When a
+  `quasar.config` file exists, its `framework.config.brand` colors, `cssAddon` flag, and
+  `extras` / `iconSet` entries are picked up automatically. Less battle-tested than the
+  Vite plugin flavor; issue reports are welcome.
+- **Vue CLI plugin**: uses the same packages and `src/` layout; verified structurally,
   expected to work.
+- **Monorepos**: the quasar app may live in a sub-package (e.g. `apps/webapp`) with
+  dependencies hoisted to the repo root; both are detected automatically.
 - **UMD / CDN**: not supported. Without `quasar` in `package.json` the extension stays
   dormant by design.
 
@@ -108,12 +112,9 @@ completions pop while typing inside attribute values in `.vue` files:
   (e.g. `Notify.create`) are not completed. The policy is to stay silent rather than guess.
 - Unknown `text-X` classes are never warned about, since they may be your own utilities
   outside the scan scope.
-- Responsive addon variants (`q-pa-md-lg`...) are enabled by `cssAddon: true` in
-  quasar.config only. Non-CLI projects that import `quasar.addon.css` manually will not
-  get the addon class completions yet.
-- Sources are expected under `src/` (the layout of all official Quasar scaffolds), and the
-  `quasar` dependency must be in the first workspace folder's root `package.json`
-  (monorepo sub-package setups are not detected).
+- Sources are expected under `src/` of the quasar app directory (the layout of all official
+  Quasar scaffolds). In multi-root workspaces only the first folder is searched, and only
+  one quasar app per workspace is served.
 
 ## Development
 

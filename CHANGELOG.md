@@ -4,6 +4,10 @@
 
 First Marketplace release.
 
+- Install-flavor support, verified against scaffolded projects of each flavor: the quasar
+  app may live in a monorepo sub-package with hoisted `node_modules` (both discovered
+  automatically), and the css addon is detected from `quasar.addon.css` / `flex-addon`
+  imports in sources and styles as well as from `cssAddon: true` in quasar.config.
 - Performance: all template-derived features (color decorations, icon decorations,
   diagnostics, class-conflict checks) now share a single tag-aware document scan, cached
   per document version. A full decorations plus diagnostics refresh is about 3x faster
